@@ -5,8 +5,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // URL for Current Season Premier League CSV from Football-Data.co.uk
-const EPL_CSV_URL = 'https://www.football-data.co.uk/mmz4281/2425/E0.csv';
-
+const EPL_CSV_URL = 'https://www.football-data.co.uk/mmz4281/2627/E0.csv';
 // Fetch & Parse CSV Function
 async function getFootballData() {
   const response = await fetch(EPL_CSV_URL);
