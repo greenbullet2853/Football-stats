@@ -4,11 +4,18 @@ import Papa from 'papaparse';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Football-Data.co.uk 2026/2027 Season Data
-const EPL_RESULTS_URL = 'https://www.football-data.co.uk/mmz4281/2627/E0.csv';
+// Multi-League CSV URLs (Football-Data.co.uk 2026/2027 Season)
+const LEAGUE_URLS = {
+  E0: { name: 'Premier League (England)', url: 'https://www.football-data.co.uk/mmz4281/2627/E0.csv' },
+  SP1: { name: 'La Liga (Spain)', url: 'https://www.football-data.co.uk/mmz4281/2627/SP1.csv' },
+  I1: { name: 'Serie A (Italy)', url: 'https://www.football-data.co.uk/mmz4281/2627/I1.csv' },
+  D1: { name: 'Bundesliga (Germany)', url: 'https://www.football-data.co.uk/mmz4281/2627/D1.csv' },
+  F1: { name: 'Ligue 1 (France)', url: 'https://www.football-data.co.uk/mmz4281/2627/F1.csv' }
+};
 
-async function getFootballData() {
-  const response = await fetch(EPL_RESULTS_URL);
+async function getFootballData(leagueCode) {
+  const league = LEAGUE_URLS[leagueCode] || LEAGUE_URLS.E0;
+  const response = await fetch(league.url);
   const csvText = await response.text();
   
   const parsed = Papa.parse(csvText, {
@@ -64,7 +71,9 @@ function calculateStandingsAndGoalStats(matches) {
 
 app.get('/', async (req, res) => {
   try {
-    const rawMatches = await getFootballData();
+    const selectedLeague = req.query.league || 'E0';
+    const leagueName = LEAGUE_URLS[selectedLeague]?.name || LEAGUE_URLS.E0.name;
+    const rawMatches = await getFootballData(selectedLeague);
     
     // Split into played matches vs upcoming scheduled fixtures
     const completedMatches = rawMatches.filter(m => m.FTHG !== "" && m.FTHG !== undefined);
@@ -78,12 +87,14 @@ app.get('/', async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Premier League Stats Hub</title>
+      <title>${leagueName} - Multi-League Stats Hub</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; margin: 0; }
         .container { max-width: 1000px; margin: 0 auto; }
         h1 { text-align: center; color: #38bdf8; margin-bottom: 5px; }
-        .sub { text-align: center; color: #94a3b8; margin-bottom: 30px; }
+        .sub { text-align: center; color: #94a3b8; margin-bottom: 20px; }
+        .league-selector { text-align: center; margin-bottom: 30px; }
+        select { background: #1e293b; color: #38bdf8; border: 2px solid #38bdf8; padding: 10px 15px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; outline: none; }
         h2 { margin-top: 30px; border-bottom: 2px solid #334155; padding-bottom: 8px; color: #38bdf8; }
         table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; margin-bottom: 25px; font-size: 14px; }
         th, td { padding: 10px 12px; text-align: left; }
@@ -94,21 +105,30 @@ app.get('/', async (req, res) => {
         .badge { background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
         .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
         @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
-        .news-card { background: #1e293b; border-left: 4px solid #38bdf8; padding: 12px 15px; margin-bottom: 10px; border-radius: 0 8px 8px 0; }
-        .news-title { font-weight: bold; font-size: 15px; margin-bottom: 4px; }
-        .news-meta { color: #94a3b8; font-size: 12px; }
         .stat-line { font-size: 12px; color: #cbd5e1; }
       </style>
     </head>
     <body>
       <div class="container">
-        <h1>⚽ Football Stats & News Dashboard</h1>
-        <p class="sub">Live 2026/2027 Premier League Analytics</p>
+        <h1>⚽ Multi-League Football Stats Dashboard</h1>
+        <p class="sub">Live 2026/2027 Season Analytics</p>
+
+        <!-- Dynamic League Selection Dropdown -->
+        <div class="league-selector">
+          <label for="league" style="margin-right: 10px; font-weight: bold;">Select League:</label>
+          <select id="league" onchange="window.location.href='/?league=' + this.value">
+            ${Object.keys(LEAGUE_URLS).map(code => `
+              <option value="${code}" ${selectedLeague === code ? 'selected' : ''}>
+                ${LEAGUE_URLS[code].name}
+              </option>
+            `).join('')}
+          </select>
+        </div>
 
         <div class="grid">
           <!-- Next Up Games -->
           <div>
-            <h2>📅 Next Up Games</h2>
+            <h2>📅 Next Up Games (${leagueName})</h2>
             <table>
               <thead>
                 <tr>
@@ -167,19 +187,8 @@ app.get('/', async (req, res) => {
           </div>
         </div>
 
-        <!-- Transfer News Feed -->
-        <h2>📰 Latest Transfer News & Rumors</h2>
-        <div class="news-card">
-          <div class="news-title">Summer Transfer Window Planning Underway</div>
-          <div class="news-meta">Premier League clubs finalizing target shortlists for upcoming scouting reports.</div>
-        </div>
-        <div class="news-card">
-          <div class="news-title">Midfield Target Monitoring</div>
-          <div class="news-meta">Top 4 contenders scouting South American talent ahead of the next window.</div>
-        </div>
-
-        <!-- League Standings Table with Goals Scored & Conceded -->
-        <h2>🏆 League Standings</h2>
+        <!-- League Standings Table -->
+        <h2>🏆 Standings (${leagueName})</h2>
         <table>
           <thead>
             <tr>
@@ -257,7 +266,7 @@ app.get('/', async (req, res) => {
 
     res.send(html);
   } catch (error) {
-    res.status(500).send('Error generating dashboard.');
+    res.status(500).send('Error generating multi-league dashboard.');
   }
 });
 
