@@ -178,7 +178,7 @@ app.get('/', async (req, res) => {
           <div class="news-meta">Top 4 contenders scouting South American talent ahead of the next window.</div>
         </div>
 
-        <!-- League Standings -->
+        <!-- League Standings Table with Goals Scored & Conceded -->
         <h2>🏆 League Standings</h2>
         <table>
           <thead>
@@ -189,6 +189,8 @@ app.get('/', async (req, res) => {
               <th>W</th>
               <th>D</th>
               <th>L</th>
+              <th>GF</th>
+              <th>GA</th>
               <th>GD</th>
               <th>Pts</th>
             </tr>
@@ -205,6 +207,8 @@ app.get('/', async (req, res) => {
               <td>${t.w}</td>
               <td>${t.d}</td>
               <td>${t.l}</td>
+              <td style="color: #4ade80;">${t.gf}</td>
+              <td style="color: #f87171;">${t.ga}</td>
               <td>${gd > 0 ? '+' + gd : gd}</td>
               <td class="win">${t.pts}</td>
             </tr>`;
@@ -229,7 +233,6 @@ app.get('/', async (req, res) => {
           </thead>
           <tbody>`;
 
-    // Last 8 matches with complete detailed metrics
     completedMatches.slice(-8).reverse().forEach(m => {
       html += `
             <tr>
