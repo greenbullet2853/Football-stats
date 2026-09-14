@@ -4,11 +4,11 @@ import Papa from 'papaparse';
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// URL for Current Season Premier League CSV from Football-Data.co.uk
-const EPL_CSV_URL = 'https://www.football-data.co.uk/mmz4281/2627/E0.csv';
-// Fetch & Parse CSV Function
+// Football-Data.co.uk 2026/2027 Season Data
+const EPL_RESULTS_URL = 'https://www.football-data.co.uk/mmz4281/2627/E0.csv';
+
 async function getFootballData() {
-  const response = await fetch(EPL_CSV_URL);
+  const response = await fetch(EPL_RESULTS_URL);
   const csvText = await response.text();
   
   const parsed = Papa.parse(csvText, {
@@ -19,8 +19,7 @@ async function getFootballData() {
   return parsed.data;
 }
 
-// Generate Premier League Standings from Match Results
-function calculateStandings(matches) {
+function calculateStandingsAndGoalStats(matches) {
   const teams = {};
 
   matches.forEach(m => {
@@ -57,24 +56,21 @@ function calculateStandings(matches) {
     }
   });
 
-  return Object.values(teams).sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
+  const standings = Object.values(teams).sort((a, b) => b.pts - a.pts || (b.gf - b.ga) - (a.gf - a.ga));
+  const topScoring = [...standings].sort((a, b) => b.gf - a.gf).slice(0, 5);
+
+  return { standings, topScoring };
 }
 
-// API Endpoint for raw JSON data
-app.get('/api/matches', async (req, res) => {
-  try {
-    const data = await getFootballData();
-    res.json(data);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch match data' });
-  }
-});
-
-// Main Web Page Served Directly at your Render URL (http://your-app.onrender.com)
 app.get('/', async (req, res) => {
   try {
-    const matches = await getFootballData();
-    const standings = calculateStandings(matches);
+    const rawMatches = await getFootballData();
+    
+    // Split into played matches vs upcoming scheduled fixtures
+    const completedMatches = rawMatches.filter(m => m.FTHG !== "" && m.FTHG !== undefined);
+    const upcomingMatches = rawMatches.filter(m => m.FTHG === "" || m.FTHG === undefined).slice(0, 5);
+    
+    const { standings, topScoring } = calculateStandingsAndGoalStats(completedMatches);
 
     let html = `
     <!DOCTYPE html>
@@ -82,27 +78,108 @@ app.get('/', async (req, res) => {
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Premier League Live Dashboard</title>
+      <title>Premier League Stats Hub</title>
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; margin: 0; }
-        .container { max-width: 900px; margin: 0 auto; }
-        h1 { text-align: center; color: #38bdf8; }
-        h2 { margin-top: 40px; border-bottom: 2px solid #334155; padding-bottom: 8px; }
-        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; margin-bottom: 30px; }
-        th, td { padding: 12px 15px; text-align: left; }
-        th { background: #334155; color: #94a3b8; font-size: 14px; text-transform: uppercase; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        h1 { text-align: center; color: #38bdf8; margin-bottom: 5px; }
+        .sub { text-align: center; color: #94a3b8; margin-bottom: 30px; }
+        h2 { margin-top: 30px; border-bottom: 2px solid #334155; padding-bottom: 8px; color: #38bdf8; }
+        table { width: 100%; border-collapse: collapse; background: #1e293b; border-radius: 8px; overflow: hidden; margin-bottom: 25px; font-size: 14px; }
+        th, td { padding: 10px 12px; text-align: left; }
+        th { background: #334155; color: #94a3b8; font-size: 12px; text-transform: uppercase; }
         tr:nth-child(even) { background: #1b263b; }
         tr:hover { background: #334155; }
         .win { color: #4ade80; font-weight: bold; }
-        .badge { background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 12px; }
+        .badge { background: #0284c7; padding: 3px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 768px) { .grid { grid-template-columns: 1fr; } }
+        .news-card { background: #1e293b; border-left: 4px solid #38bdf8; padding: 12px 15px; margin-bottom: 10px; border-radius: 0 8px 8px 0; }
+        .news-title { font-weight: bold; font-size: 15px; margin-bottom: 4px; }
+        .news-meta { color: #94a3b8; font-size: 12px; }
+        .stat-line { font-size: 12px; color: #cbd5e1; }
       </style>
     </head>
     <body>
       <div class="container">
-        <h1>⚽ Football Stats Dashboard</h1>
-        <p style="text-align:center; color: #94a3b8;">Data sourced live from Football-Data.co.uk CSV files</p>
-        
-        <h2>Premier League Standings</h2>
+        <h1>⚽ Football Stats & News Dashboard</h1>
+        <p class="sub">Live 2026/2027 Premier League Analytics</p>
+
+        <div class="grid">
+          <!-- Next Up Games -->
+          <div>
+            <h2>📅 Next Up Games</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Fixture</th>
+                  <th>Odds (H/D/A)</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+    if (upcomingMatches.length === 0) {
+      html += `<tr><td colspan="3">No upcoming fixtures scheduled in current batch.</td></tr>`;
+    } else {
+      upcomingMatches.forEach(m => {
+        html += `
+          <tr>
+            <td>${m.Date || 'TBD'}</td>
+            <td><b>${m.HomeTeam}</b> vs <b>${m.AwayTeam}</b></td>
+            <td>${m.B365H || '-'}/${m.B365D || '-'}/${m.B365A || '-'}</td>
+          </tr>`;
+      });
+    }
+
+    html += `
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Top Attack Teams -->
+          <div>
+            <h2>🎯 Top Scoring Teams</h2>
+            <table>
+              <thead>
+                <tr>
+                  <th>Rank</th>
+                  <th>Team</th>
+                  <th>Matches</th>
+                  <th>Goals Scored</th>
+                </tr>
+              </thead>
+              <tbody>`;
+
+    topScoring.forEach((t, i) => {
+      html += `
+        <tr>
+          <td><b>#${i + 1}</b></td>
+          <td>${t.team}</td>
+          <td>${t.mp}</td>
+          <td class="win">${t.gf} goals</td>
+        </tr>`;
+    });
+
+    html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Transfer News Feed -->
+        <h2>📰 Latest Transfer News & Rumors</h2>
+        <div class="news-card">
+          <div class="news-title">Summer Transfer Window Planning Underway</div>
+          <div class="news-meta">Premier League clubs finalizing target shortlists for upcoming scouting reports.</div>
+        </div>
+        <div class="news-card">
+          <div class="news-title">Midfield Target Monitoring</div>
+          <div class="news-meta">Top 4 contenders scouting South American talent ahead of the next window.</div>
+        </div>
+
+        <!-- League Standings -->
+        <h2>🏆 League Standings</h2>
         <table>
           <thead>
             <tr>
@@ -137,30 +214,34 @@ app.get('/', async (req, res) => {
           </tbody>
         </table>
 
-        <h2>Recent Matches & Odds (Bet365)</h2>
+        <!-- Detailed Game Stats -->
+        <h2>📊 Detailed Match Stats (Recent Results)</h2>
         <table>
           <thead>
             <tr>
-              <th>Date</th>
-              <th>Match</th>
-              <th>Result</th>
-              <th>Home Odds</th>
-              <th>Draw Odds</th>
-              <th>Away Odds</th>
+              <th>Date & Match</th>
+              <th>Score</th>
+              <th>Shots (Target)</th>
+              <th>Corners</th>
+              <th>Fouls</th>
+              <th>Cards (Y/R)</th>
             </tr>
           </thead>
           <tbody>`;
 
-    // Show last 10 matches
-    matches.slice(-10).reverse().forEach(m => {
+    // Last 8 matches with complete detailed metrics
+    completedMatches.slice(-8).reverse().forEach(m => {
       html += `
             <tr>
-              <td>${m.Date}</td>
-              <td><b>${m.HomeTeam}</b> vs <b>${m.AwayTeam}</b></td>
+              <td>
+                <b>${m.HomeTeam}</b> vs <b>${m.AwayTeam}</b><br>
+                <span class="stat-line">${m.Date}</span>
+              </td>
               <td><span class="badge">${m.FTHG} - ${m.FTAG}</span></td>
-              <td>${m.B365H || 'N/A'}</td>
-              <td>${m.B365D || 'N/A'}</td>
-              <td>${m.B365A || 'N/A'}</td>
+              <td>${m.HS || 0}:${m.AS || 0} (${m.HST || 0}:${m.AST || 0})</td>
+              <td>${m.HC || 0} : ${m.AC || 0}</td>
+              <td>${m.HF || 0} : ${m.AF || 0}</td>
+              <td>🟨 ${m.HY || 0}:${m.AY || 0} | 🟥 ${m.HR || 0}:${m.AR || 0}</td>
             </tr>`;
     });
 
@@ -173,7 +254,7 @@ app.get('/', async (req, res) => {
 
     res.send(html);
   } catch (error) {
-    res.status(500).send('Error rendering football stats dashboard.');
+    res.status(500).send('Error generating dashboard.');
   }
 });
 
